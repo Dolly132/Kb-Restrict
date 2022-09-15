@@ -291,7 +291,7 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 //----------------------------------------------------------------------------------------------------
 stock bool IsValidClient(int client)
 {
-	return (1 <= client <= MaxClients && IsClientInGame(client) && !IsClientSourceTV(client));
+	return (1 <= client <= MaxClients && IsClientInGame(client) && !IsClientSourceTV(client) && !IsFakeClient(client));
 }
 
 //----------------------------------------------------------------------------------------------------
