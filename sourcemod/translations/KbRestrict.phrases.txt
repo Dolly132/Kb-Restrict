@@ -1,0 +1,62 @@
+"Phrases"
+{
+	"Restricted"
+	{
+		"#format"	"{1:N},{2:N},{3:d},{4:s},{5:s}"
+		"en"		"{white}{1} {red}Restricted {white}{2} {red}for {3} Minutes.\n{4} Reason: {5}."
+	}
+	"RestrictedPerma"
+	{
+		"#format"	"{1:N},{2:N},{3:s},{4:s}"
+		"en"		"{white}{1} {red}Restricted {white}{2} {red}Permanently.\n{3} Reason: {4}."
+	}
+	"RestrictedTemp"
+	{
+		"#format"	"{1:N},{2:N},{3:s},{4:s}"
+		"en"		"{white}{1} {red}Restricted {white}{2} {red}Temporarily.\n{3} Reason: {4}."
+	}
+	"UnRestricted"
+	{
+		"#format"	"{1:N},{2:N},{3:s},{4:s}"
+		"en"		"{white}{1} {red}Un-Restricted {white}{2}.\n{3} Reason: {4}."
+	}
+	"AlreadyKBanned"
+	{
+		"en"		"The specified target is already {white}Kb-Restricted."
+	}
+	"AlreadyKUnbanned"
+	{
+		"en"		"The specified target is not Kb-Restricted."
+	}
+	"PlayerNotValid"
+	{
+		"en"		"The specified target is not valid anymore."
+	}
+	"RestrictTimeLeft"
+	{
+		"#format"	"{1:s}"
+		"en"		"Your Restriction expires in {white}{1}."
+	}
+	"NotOwnBan"
+	{
+		"en"		"You cannot Kb-UnRestrict any other KBans that is not yours."
+	}
+	"SteamID quotes"
+	{
+		"en"		"Please put the SteamID between quotes."
+	}
+	"SteamIDKUnban"
+	{
+		"#format"	"{1:s},{2:s}"
+		"en"		"Successfully Removed KBan From {white}{1}{green}[{white}{2}{green}]."
+	}
+	"ChatReason"
+	{
+		"en"		"Please type the reason in chat."
+	}
+	"OfflineBan"
+	{
+		"#format"	"{1:s},{2:s},{3:d},{4:s}"
+		"en"		"Successfully Added Kb-Restrict ban on {white}{1}{green}[{white}{2}{green}]{darkblue} for {white}{3} {darkblue}minutes ({green}reason: {4}{darkblue})."
+	}
+}
