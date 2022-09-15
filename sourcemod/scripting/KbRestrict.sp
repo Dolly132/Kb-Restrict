@@ -5,7 +5,7 @@
 #include <sdktools>
 #include <sdkhooks>
 #include <multicolors>
-#include <clientprefs>
+#include <adminmenu>
 #include <KbRestrict>
 
 #define KB_Tag "{aqua}[Kb-Restrict]{bisque}"
@@ -32,6 +32,8 @@ ConVar g_cvPort = null;
 Database g_hDB;
 
 ArrayList g_aBannedIPs;
+
+TopMenu g_hAdminMenu = null;
 
 // MAIN PLUGIN
 
@@ -113,25 +115,9 @@ public void OnPluginStart()
 		}
 	}
 	
-	RegAdminCmd("sm_clearbans", Command_Test, ADMFLAG_BAN);
-}
-
-public Action Command_Test(int client, int args)
-{
-	if(g_hDB == null)
-		return Plugin_Handled;
-		
-	char sQuery[1024];
-	g_hDB.Format(sQuery, 1024, "DELETE FROM `KbRestrict_Bans` WHERE server_ip='%s'", ServerIP);
-	SQL_TQuery(g_hDB, SQL_CALLBACK, sQuery);
-	CPrintToChat(client, "Done");
-	return Plugin_Handled;
-}
-
-public void SQL_CALLBACK(Handle hDatabase, Handle hr, const char[] ser, any data)
-{
-	if(ser[0])
-		return;
+	TopMenu topmenu;
+	if(LibraryExists("adminmenu") && ((topmenu = GetAdminTopMenu()) != null))
+		OnAdminMenuReady(topmenu);
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -1232,6 +1218,138 @@ public Action Command_OfflineKbRestrict(int client, int args)
 
 // MENUS RELATED STUFFS
 
+// Top menu
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
+public void OnLibraryRemoved(const char[] name)
+{
+	if(StrEqual(name, "adminmenu", false))
+		g_hAdminMenu = null;
+}
+
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
+public void OnAdminMenuReady(Handle aTopMenu)
+{
+	TopMenu topmenu = TopMenu.FromHandle(aTopMenu);
+	
+	if(topmenu == g_hAdminMenu)
+		return;
+	
+	g_hAdminMenu = topmenu;
+	
+	TopMenuObject hMenuObj = AddToTopMenu(g_hAdminMenu, "KbRestrictCommands", TopMenuObject_Category, CategoryHandler, INVALID_TOPMENUOBJECT);
+	
+	if(hMenuObj == INVALID_TOPMENUOBJECT)
+		return;
+		
+	AddToTopMenu(g_hAdminMenu, "KbRestrict_RestrictPlayer", TopMenuObject_Item, ItemHandler_RestrictPlayer, hMenuObj, "", ADMFLAG_BAN);
+	AddToTopMenu(g_hAdminMenu, "KbRestrict_ListOfKbans", TopMenuObject_Item, ItemHandler_ListOfKbans, hMenuObj, "", ADMFLAG_RCON);
+	AddToTopMenu(g_hAdminMenu, "KbRestrict_OnlineKBanned", TopMenuObject_Item, ItemHandler_OnlineKBanned, hMenuObj, "", ADMFLAG_BAN);
+	AddToTopMenu(g_hAdminMenu, "KbRestrict_OwnBans", TopMenuObject_Item, ItemHandler_OwnBans, hMenuObj, "", ADMFLAG_BAN);
+}
+
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
+public void CategoryHandler(TopMenu topmenu, 
+      TopMenuAction action,
+      TopMenuObject object_id,
+      int param,
+      char[] buffer,
+      int maxlength)
+{
+	if(action == TopMenuAction_DisplayTitle)
+	{
+		Format(buffer, maxlength, "KbRestrict Commands Main Menu");
+	}
+	else if(action == TopMenuAction_DisplayOption)
+	{
+		Format(buffer, maxlength, "KbRestrict Commands");
+	}
+}
+
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
+public void ItemHandler_RestrictPlayer(TopMenu topmenu, 
+      TopMenuAction action,
+      TopMenuObject object_id,
+      int param,
+      char[] buffer,
+      int maxlength)
+{
+	if(action == TopMenuAction_DisplayOption)
+	{
+		Format(buffer, maxlength, "KBan a Player");
+	}
+	else if(action == TopMenuAction_SelectOption)
+	{
+		DisplayKBan_Menu(param, .mode=MenuMode_RestrictPlayer);
+	}
+}
+
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
+public void ItemHandler_ListOfKbans(TopMenu topmenu, 
+      TopMenuAction action,
+      TopMenuObject object_id,
+      int param,
+      char[] buffer,
+      int maxlength)
+{
+	if(action == TopMenuAction_DisplayOption)
+	{
+		Format(buffer, maxlength, "List of KBans");
+	}
+	else if(action == TopMenuAction_SelectOption)
+	{
+		DisplayKBan_Menu(param, .mode=MenuMode_AllBans);
+	}
+}
+
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
+public void ItemHandler_OnlineKBanned(TopMenu topmenu, 
+      TopMenuAction action,
+      TopMenuObject object_id,
+      int param,
+      char[] buffer,
+      int maxlength)
+{
+	if(action == TopMenuAction_DisplayOption)
+	{
+		Format(buffer, maxlength, "Online KBanned");
+	}
+	else if(action == TopMenuAction_SelectOption)
+	{
+		DisplayKBan_Menu(param, .mode=MenuMode_OnlineBans);
+	}
+}
+
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
+public void ItemHandler_OwnBans(TopMenu topmenu, 
+      TopMenuAction action,
+      TopMenuObject object_id,
+      int param,
+      char[] buffer,
+      int maxlength)
+{
+	if(action == TopMenuAction_DisplayOption)
+	{
+		Format(buffer, maxlength, "Your Own List of KBans");
+	}
+	else if(action == TopMenuAction_SelectOption)
+	{
+		DisplayKBan_Menu(param, .mode=MenuMode_OwnBans);
+	}
+}
 //----------------------------------------------------------------------------------------------------
 // Menu :
 //----------------------------------------------------------------------------------------------------		
@@ -1258,6 +1376,12 @@ public int Menu_KbRestrictList(Menu menu, MenuAction action, int param1, int par
 	{
 		case MenuAction_End:
 			delete menu;
+		
+		case MenuAction_Cancel:
+		{
+			if(param2 == MenuCancel_ExitBack && g_hAdminMenu != null)
+				DisplayTopMenu(g_hAdminMenu, param1, TopMenuPosition_LastCategory);
+		}
 		
 		case MenuAction_Select:
 		{
