@@ -57,11 +57,11 @@ enum struct PlayerData
 		this.BanDuration = -2;
 		this.TimeStamp_Start = 0;
 		this.TimeStamp_End = 0;
-		this.ClientIP = "";
-		this.AdminName = "";
-		this.AdminSteamID = "";
-		this.Reason = "";
-		this.MapIssued = "";
+		this.ClientIP[0] = '\0';
+		this.AdminName[0] = '\0';
+		this.AdminSteamID[0] = '\0';
+		this.Reason[0] = '\0';
+		this.MapIssued[0] = '\0';
 	}
 }
 	
