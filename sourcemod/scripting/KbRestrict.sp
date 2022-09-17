@@ -112,9 +112,10 @@ public void OnPluginStart()
 		{
 			OnClientPutInServer(i);
 			OnClientPostAdminCheck(i);
+			OnClientConnected(i);
 		}
 	}
-	
+
 	TopMenu topmenu;
 	if(LibraryExists("adminmenu") && ((topmenu = GetAdminTopMenu()) != null))
 		OnAdminMenuReady(topmenu);
@@ -133,7 +134,7 @@ public void OnAllPluginsLoaded()
 //----------------------------------------------------------------------------------------------------
 public void OnMapStart()
 {
-	g_aBannedIPs = new ArrayList(ByteCountToCells(32));
+	g_aBannedIPs = new ArrayList(ByteCountToCells(4096));
 	UpdateBannedIPs();
 }
 
@@ -157,6 +158,21 @@ public void OnClientPutInServer(int client)
 //----------------------------------------------------------------------------------------------------
 // Purpose:
 //----------------------------------------------------------------------------------------------------
+public void OnClientConnected(int client)
+{
+	char ClientIP[32];
+	GetClientIP(client, ClientIP, sizeof(ClientIP));
+	
+	if(g_aBannedIPs == null)
+		return;
+		
+	if(g_aBannedIPs.FindString(ClientIP) != -1)
+		g_bIsClientRestricted[client] = true;
+}
+
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
 public void OnClientDisconnect(int client)
 {
 	g_bIsClientRestricted[client] = false;
@@ -170,16 +186,6 @@ public void OnClientDisconnect(int client)
 public void OnClientPostAdminCheck(int client)
 {
 	KB_ApplyRestrict(client);
-
-// Check if player's ip is on the arraylist if so then kban
-	char ClientIP[32];
-	GetClientIP(client, ClientIP, sizeof(ClientIP));
-	
-	if(g_aBannedIPs == null)
-		return;
-		
-	if(g_aBannedIPs.FindString(ClientIP) != -1)
-		g_bIsClientRestricted[client] = true;
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -291,7 +297,7 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 //----------------------------------------------------------------------------------------------------
 stock bool IsValidClient(int client)
 {
-	return (1 <= client <= MaxClients && IsClientInGame(client) && !IsClientSourceTV(client) && !IsFakeClient(client));
+	return (1 <= client <= MaxClients && IsClientInGame(client) && !IsClientSourceTV(client));
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -416,6 +422,9 @@ public void SQL_CheckBans(Handle hDatabase, Handle hResults, const char[] sError
 						
 stock void UpdateBannedIPs()
 {
+	if(g_aBannedIPs == null)
+		return;
+		
 	g_aBannedIPs.Clear();
 	
 	// Let's add the banned IPs to the arraylist
@@ -608,7 +617,7 @@ stock void KB_RestrictPlayer(int iTarget, int iAdmin, int time, const char[] rea
 		g_PlayerData[iTarget].BanDuration = -1;
 		Format(g_PlayerData[iTarget].Reason, sizeof(PlayerData::Reason), reason);
 		Format(g_PlayerData[iTarget].AdminSteamID, sizeof(PlayerData::AdminSteamID), AdminSteamID);
-		CPrintToChatAll("%s %T", KB_Tag, "RestrictedTemp", iAdmin, iAdmin, iTarget, reason);
+		CPrintToChatAll("%s %T", KB_Tag, "RestrictedTemp", iAdmin, iAdmin, iTarget, KB_Tag, reason);
 		LogAction(iAdmin, iTarget, "[Kb-Restrict] \"%L\" has Kb-Restricted \"%L\" Temporarily (reason: %s)", iAdmin, iTarget, reason);
 		return;
 	}
@@ -1002,6 +1011,17 @@ public Action Command_CheckKbStatus(int client, int args)
 	}
 	else
 	{
+		if(g_PlayerData[client].BanDuration == -1)
+		{
+			CReplyToCommand(client, "%s %T", KB_Tag, "PlayerRestrcitedTemp", client);
+			return Plugin_Handled;
+		}
+		else if(g_PlayerData[client].BanDuration == 0)
+		{
+			CReplyToCommand(client, "%s %T", KB_Tag, "PlayerRestrictedPerma", client);
+			return Plugin_Handled;
+		}
+		
 		int lefttime = (g_PlayerData[client].TimeStamp_End - GetTime());
 		char sTimeLeft[128];
 		
@@ -1042,7 +1062,10 @@ public Action Command_KbRestrict(int client, int args)
         Arguments[0] = '\0';
     }
 
-	int time = StringToInt(s_time);
+	int time;
+	if(!StringToIntEx(s_time, time))
+		time = g_cvDefaultLength.IntValue;
+		
 	int target = FindTarget(client, arg, false, false);
 	
 	if(!IsValidClient(target))
@@ -1117,8 +1140,13 @@ public Action Command_KbUnRestrict(int client, int args)
 		return Plugin_Handled;
 	}
 	
-	if(!GetClientAuthId(client, AuthId_Steam2, AdminSteamID, sizeof(AdminSteamID)))
-		return Plugin_Handled;
+	if(client <= 0)
+		AdminSteamID = "Console";
+	else
+	{
+		if(!GetClientAuthId(client, AuthId_Steam2, AdminSteamID, sizeof(AdminSteamID)))
+			return Plugin_Handled;
+	}
 	
 	if(!CheckCommandAccess(client, "sm_koban", ADMFLAG_RCON, true) && !StrEqual(AdminSteamID, g_PlayerData[target].AdminSteamID, false))
 	{
@@ -1174,9 +1202,11 @@ public Action Command_OfflineKbRestrict(int client, int args)
 		Arguments[0] = '\0';
 	}
 	
-	int time = StringToInt(s_time);
-
-	if(StrEqual(playerName, "") || playerName[0] == '\0')
+	int time;
+	if(!StringToIntEx(s_time, time))
+		time = g_cvDefaultLength.IntValue;
+	
+	if(StrEqual(playerName, ""))
 	{
 		CReplyToCommand(client, "%s %T", KB_Tag, "SteamID quotes", client);
 		return Plugin_Handled;
@@ -1184,14 +1214,14 @@ public Action Command_OfflineKbRestrict(int client, int args)
 	
 	if(!CheckCommandAccess(client, "sm_koban", ADMFLAG_RCON, true))
 	{
-		if(time == 0 || time == -1)
+		if(time <= 0)
 			time = g_cvDefaultLength.IntValue;
 		else if(time > g_cvAddBanLength.IntValue)
 			time = g_cvAddBanLength.IntValue;
 	}
 	else
 	{
-		if(time == -1)
+		if(time < 0)
 			time = g_cvDefaultLength.IntValue;
 	}
 	
@@ -2000,7 +2030,7 @@ public int Menu_AdminBansActionsHandler(Menu menu, MenuAction action, int param1
 			}
 			else
 			{
-				if(!g_bIsClientRestricted[target])
+				if(g_bIsClientRestricted[target])
 					KB_UnRestrictPlayer(target, param1);
 				else
 					CPrintToChat(param1, "%s %T", KB_Tag, "AlreadyKUnbanned", param1);
