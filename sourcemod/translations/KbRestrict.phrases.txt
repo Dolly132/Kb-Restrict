@@ -22,15 +22,27 @@
 	}
 	"AlreadyKBanned"
 	{
-		"en"		"The specified target is already {white}Kb-Restricted."
+		"en"		"The specified target is already {green}Kb-Restricted{white}."
 	}
 	"AlreadyKUnbanned"
 	{
-		"en"		"The specified target is not Kb-Restricted."
+		"en"		"The specified target is not {green}Kb-Restricted{white}."
 	}
 	"PlayerNotValid"
 	{
-		"en"		"The specified target is not valid anymore."
+		"en"		"The specified target is not {green}valid {white}anymore."
+	}
+	"PlayerNotRestricted"
+	{
+		"en"		"You are currently not {green}Kb-Restricted{white}."
+	}
+	"PlayerRestrcitedTemp" 
+	{
+		"en"		"You are currently restricted {green}Temporarily{white}."
+	}
+	"PlayerRestrictedPerma"
+	{
+		"en"		"You are current restricted {green}Permanently{white}."
 	}
 	"RestrictTimeLeft"
 	{
