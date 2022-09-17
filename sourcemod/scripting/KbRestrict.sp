@@ -72,7 +72,7 @@ public Plugin myinfo =
 	name = "Kb-Restrict",
 	author = "Dolly, .Rushaway",
 	description = "Block certain weapons damage from the  KBanned players",
-	version = "3.0",
+	version = "3.3",
 	url = "https://nide.gg"
 }
 
@@ -833,7 +833,7 @@ public void SQL_AddOfflineBanCheck(Handle hDatabase, Handle hResults, const char
 		if(iAdmin == 0)
 			PrintToServer("[Kb-Restrict] The specified target is already kbanned");
 		else
-			CPrintToChat(iAdmin, "%s %T", KB_Tag, "AlreadyKUnbanned", iAdmin);
+			CPrintToChat(iAdmin, "%s %T", KB_Tag, "AlreadyKBanned", iAdmin);
 			
 		return;
 	}
