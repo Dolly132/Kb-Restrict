@@ -72,7 +72,7 @@ public Plugin myinfo =
 	name = "Kb-Restrict",
 	author = "Dolly, .Rushaway",
 	description = "Block certain weapons damage from the  KBanned players",
-	version = "3.0",
+	version = "3.5",
 	url = "https://nide.gg"
 }
 
