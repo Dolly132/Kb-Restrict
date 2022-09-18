@@ -72,7 +72,7 @@ public Plugin myinfo =
 	name = "Kb-Restrict",
 	author = "Dolly, .Rushaway",
 	description = "Block certain weapons damage from the  KBanned players",
-	version = "3.5",
+	version = "3.0",
 	url = "https://nide.gg"
 }
 
@@ -572,7 +572,6 @@ stock void DB_CreateTables()
 												... "PRIMARY KEY (`id`))");
 												
 		SQL_TQuery(g_hDB, SQL_TablesMySQLCallback, sQuery);
-		PrintToServer("It should now create table for mysql");
 	}
 	else if(StrEqual(sDriver, "sqlite", false))
 	{
@@ -589,10 +588,9 @@ stock void DB_CreateTables()
 												... "`map` varchar(128) NOT NULL,"
 												... "`length` INTEGER NOT NULL,"
 												... "`time_stamp_start` INTEGER NOT NULL,"
-												... "`time_stamp_end` INTEGER NOT NULL,");
+												... "`time_stamp_end` INTEGER NOT NULL)");
 												
 		SQL_TQuery(g_hDB, SQL_TablesSQLiteCallback, sQuery);
-		PrintToServer("It should now create table for sqlite");
 	}
 }
 
