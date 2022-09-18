@@ -33,7 +33,7 @@ Database g_hDB;
 
 ArrayList g_aBannedIPs;
 
-TopMenu g_hAdminMenu = null;
+// TopMenu g_hAdminMenu = null; TODO LIST: Fix topmenus 
 
 // MAIN PLUGIN
 
@@ -72,7 +72,7 @@ public Plugin myinfo =
 	name = "Kb-Restrict",
 	author = "Dolly, .Rushaway",
 	description = "Block certain weapons damage from the  KBanned players",
-	version = "3.3",
+	version = "3.0",
 	url = "https://nide.gg"
 }
 
@@ -115,10 +115,13 @@ public void OnPluginStart()
 			OnClientConnected(i);
 		}
 	}
-
+	
+	/*
+	TODO: FIX IT
 	TopMenu topmenu;
 	if(LibraryExists("adminmenu") && ((topmenu = GetAdminTopMenu()) != null))
 		OnAdminMenuReady(topmenu);
+	*/ 
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -388,7 +391,7 @@ public Action Timer_BansChecker(Handle timer)
 		return Plugin_Stop;
 	
 	char sQuery[1024];
-	g_hDB.Format(sQuery, sizeof(sQuery), "SELECT `client_steamid`, `length`, `time_stamp_end` FROM `KbRestrict_Bans` WHERE server_ip='%s'", ServerIP);
+	g_hDB.Format(sQuery, sizeof(sQuery), "SELECT `client_steamid`, `length`, `time_stamp_end` FROM `KbRestrict_CurrentBans` WHERE server_ip='%s'", ServerIP);
 	SQL_TQuery(g_hDB, SQL_CheckBans, sQuery);
 	return Plugin_Continue;
 }
@@ -432,7 +435,7 @@ stock void UpdateBannedIPs()
 		return;
 	
 	char sQuery[1024];
-	g_hDB.Format(sQuery, sizeof(sQuery), "SELECT `client_ip` FROM `KbRestrict_Bans` WHERE server_ip='%s'", ServerIP);
+	g_hDB.Format(sQuery, sizeof(sQuery), "SELECT `client_ip` FROM `KbRestrict_CurrentBans` WHERE server_ip='%s'", ServerIP);
 	SQL_TQuery(g_hDB, SQL_AddBannedIPsToArray, sQuery);
 }
 
@@ -467,7 +470,7 @@ stock void KB_ApplyRestrict(int client)
 		
 	char sQuery[1024];
 	g_hDB.Format(sQuery, sizeof(sQuery), "SELECT `client_ip`, `admin_name`, `admin_steamid`, `reason`, `Map`, `length`, `time_stamp_start`, `time_stamp_end`"
-											... "FROM `KbRestrict_Bans` WHERE client_steamid='%s' and server_ip='%s'", SteamID, ServerIP);
+											... "FROM `KbRestrict_CurrentBans` WHERE client_steamid='%s' and server_ip='%s'", SteamID, ServerIP);
 				
 	DataPack pack = new DataPack();
 	SQL_TQuery(g_hDB, SQL_ApplyRestrict, sQuery, pack);
@@ -511,7 +514,7 @@ public void SQL_ApplyRestrict(Handle hDatabase, Handle hResults, const char[] sE
 		if(StrEqual(buffer, "UnKnown"))
 		{
 			char sQuery[1024];
-			g_hDB.Format(sQuery, sizeof(sQuery), "UPDATE `KbRestrict_Bans` SET client_ip ='%s' WHERE client_steamid='%s'", ClientIP, SteamID);
+			g_hDB.Format(sQuery, sizeof(sQuery), "UPDATE `KbRestrict_CurrentBans` SET client_ip ='%s' WHERE client_steamid='%s'", ClientIP, SteamID);
 			SQL_TQuery(g_hDB, SQL_AddClientIPToDB, sQuery);
 		}
 		else
@@ -550,46 +553,75 @@ stock void DB_CreateTables()
 	
 	char sDriver[32];
 	g_hDB.Driver.GetIdentifier(sDriver, sizeof(sDriver));
-	if(!StrEqual(sDriver, "mysql", false))
+	if(StrEqual(sDriver, "mysql", false))
 	{
-		SetFailState("[Kb-Restrict] This plugin only supports mysql driver.");
-		return;
+		char sQuery[1024];
+		g_hDB.Format(sQuery, sizeof(sQuery), "CREATE TABLE IF NOT EXISTS `KbRestrict_CurrentBans`"
+												... "(`id` int(11) unsigned NOT NULL auto_increment,"
+												... "`server_ip` varchar(32) NOT NULL,"
+												... "`client_name` varchar(64) NOT NULL,"
+												... "`client_steamid` varchar(32) NOT NULL,"
+												... "`client_ip` varchar(32) NOT NULL,"
+												... "`admin_name` varchar(64) NOT NULL,"
+												... "`admin_steamid` varchar(32) NOT NULL,"
+												... "`reason` varchar(128) NOT NULL,"
+												... "`map` varchar(128) NOT NULL,"
+												... "`length` int NOT NULL,"
+												... "`time_stamp_start` int NOT NULL,"
+												... "`time_stamp_end` int NOT NULL,"
+												... "PRIMARY KEY (`id`))");
+												
+		SQL_TQuery(g_hDB, SQL_TablesMySQLCallback, sQuery);
+		PrintToServer("It should now create table for mysql");
 	}
-	
-	char sQuery[1024];
-	g_hDB.Format(sQuery, sizeof(sQuery), "CREATE TABLE IF NOT EXISTS `KbRestrict_Bans`"
-											... "(`id` int(11) unsigned NOT NULL auto_increment,"
-											... "`server_ip` varchar(32) NOT NULL,"
-											... "`client_name` varchar(64) NOT NULL,"
-											... "`client_steamid` varchar(32) NOT NULL,"
-											... "`client_ip` varchar(32) NOT NULL,"
-											... "`admin_name` varchar(64) NOT NULL,"
-											... "`admin_steamid` varchar(32) NOT NULL,"
-											... "`reason` varchar(128) NOT NULL,"
-											... "`map` varchar(128) NOT NULL,"
-											... "`length` int NOT NULL,"
-											... "`time_stamp_start` int NOT NULL,"
-											... "`time_stamp_end` int NOT NULL,"
-											... "PRIMARY KEY (`id`),"
-											... "UNIQUE KEY (`client_steamid`),"
-											... "UNIQUE KEY (`client_ip`),"
-											... "UNIQUE KEY (`server_ip`))");
-											
-	SQL_TQuery(g_hDB, SQL_TablesCallback, sQuery);
+	else if(StrEqual(sDriver, "sqlite", false))
+	{
+		char sQuery[1024];
+		g_hDB.Format(sQuery, sizeof(sQuery), "CREATE TABLE IF NOT EXISTS `KbRestrict_CurrentBans`"
+												... "(`id` INTEGER PRIMARY KEY AUTOINCREMENT,"
+												... "`server_ip` varchar(32) NOT NULL,"
+												... "`client_name` varchar(64) NOT NULL,"
+												... "`client_steamid` varchar(32) NOT NULL,"
+												... "`client_ip` varchar(32) NOT NULL,"
+												... "`admin_name` varchar(64) NOT NULL,"
+												... "`admin_steamid` varchar(32) NOT NULL,"
+												... "`reason` varchar(128) NOT NULL,"
+												... "`map` varchar(128) NOT NULL,"
+												... "`length` INTEGER NOT NULL,"
+												... "`time_stamp_start` INTEGER NOT NULL,"
+												... "`time_stamp_end` INTEGER NOT NULL,");
+												
+		SQL_TQuery(g_hDB, SQL_TablesSQLiteCallback, sQuery);
+		PrintToServer("It should now create table for sqlite");
+	}
 }
 
 //----------------------------------------------------------------------------------------------------
 // Database :
 //----------------------------------------------------------------------------------------------------
-public void SQL_TablesCallback(Handle hDatabase, Handle hResults, const char[] sError, any data)
+public void SQL_TablesMySQLCallback(Handle hDatabase, Handle hResults, const char[] sError, any data)
 {
 	if(hResults == null)
 		return;
 		
 	if(sError[0])
-		LogError("[Kb-Restrict] Couldn't Create tables for database, error: %s", sError);
+		LogError("[Kb-Restrict] Couldn't Create mysql tables for database, error: %s", sError);
 	else
-		LogMessage("[Kb-Restrict] Successfully Created tables for database.");
+		LogMessage("[Kb-Restrict] Successfully Created mysql tables for database.");
+}
+
+//----------------------------------------------------------------------------------------------------
+// Database :
+//----------------------------------------------------------------------------------------------------
+public void SQL_TablesSQLiteCallback(Handle hDatabase, Handle hResults, const char[] sError, any data)
+{
+	if(hResults == null)
+		return;
+		
+	if(sError[0])
+		LogError("[Kb-Restrict] Couldn't Create sqlite tables for database, error: %s", sError);
+	else
+		LogMessage("[Kb-Restrict] Successfully Created sqlite tables for database.");
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -688,17 +720,13 @@ stock void KB_RestrictPlayer(int iTarget, int iAdmin, int time, const char[] rea
 			
 			//Add ban to database
 			char sQuery[1024];
-			g_hDB.Format(sQuery, sizeof(sQuery), "INSERT INTO `KbRestrict_Bans`("
+			g_hDB.Format(sQuery, sizeof(sQuery), "INSERT INTO `KbRestrict_CurrentBans`("
 													... "`server_ip`, `client_name`, `client_steamid`, `client_ip`,"
 													... "`admin_name`, `admin_steamid`, `reason`,"
 													... "`map`, `length`, `time_stamp_start`, `time_stamp_end`) VALUES ("
-													... "'%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%d')"
-													... "ON DUPLICATE KEY UPDATE `server_ip`='%s', `client_name`='%s', `client_steamid`='%s',"
-													... "`client_ip`='%s', `admin_name`='%s', `admin_steamid`='%s', `reason`='%s', `map`='%s'",
+													... "'%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%d')",
 													ServerIP, sETargetName, TargetSteamID, TargetIP, sEAdminName, AdminSteamID,
-													reason, Map, time, time_stamp_start, time_stamp_end, ServerIP, sETargetName, TargetSteamID, TargetIP,
-													sEAdminName,
-													AdminSteamID, reason, Map);
+													reason, Map, time, time_stamp_start, time_stamp_end);
 													
 			SQL_TQuery(g_hDB, SQL_AddBan, sQuery);
 			
@@ -723,16 +751,13 @@ stock void KB_RestrictPlayer(int iTarget, int iAdmin, int time, const char[] rea
 			//Add perma ban to database:
 		
 			char sQuery[1024];
-			g_hDB.Format(sQuery, sizeof(sQuery), "INSERT INTO `KbRestrict_Bans`("
+			g_hDB.Format(sQuery, sizeof(sQuery), "INSERT INTO `KbRestrict_CurrentBans`("
 													... "`server_ip`, `client_name`, `client_steamid`, `client_ip`,"
 													... "`admin_name`, `admin_steamid`, `reason`,"
 													... "`map`, `length`, `time_stamp_start`, `time_stamp_end`) VALUES ("
-													... "'%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%d')"
-													... "ON DUPLICATE KEY UPDATE `server_ip`='%s', `client_name`='%s', `client_steamid`='%s',"
-													... "`client_ip`='%s', `admin_name`='%s', `admin_steamid`='%s', `reason`='%s', `map`='%s'",
+													... "'%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%d')",
 													ServerIP, sETargetName, TargetSteamID, TargetIP, sEAdminName, AdminSteamID,
-													reason, Map, 0, GetTime(), 0, ServerIP, sETargetName, TargetSteamID, TargetIP, sEAdminName,
-													AdminSteamID, reason, Map);
+													reason, Map, 0, GetTime(), 0);
 			
 			SQL_TQuery(g_hDB, SQL_AddPermaBan, sQuery);
 		}
@@ -800,7 +825,7 @@ stock void KB_AddOfflineBanCheck(const char[] TargetSteamID, const char[] Target
 		userid = GetClientUserId(iAdmin);
 		
 	char sQuery[1024];
-	g_hDB.Format(sQuery, sizeof(sQuery), "SELECT `client_name` FROM `KbRestrict_Bans` WHERE client_steamid='%s'", TargetSteamID);
+	g_hDB.Format(sQuery, sizeof(sQuery), "SELECT `client_name` FROM `KbRestrict_CurrentBans` WHERE client_steamid='%s'", TargetSteamID);
 	DataPack pack = new DataPack();
 	SQL_TQuery(g_hDB, SQL_AddOfflineBanCheck, sQuery, pack);
 	pack.WriteString(TargetSteamID);
@@ -868,7 +893,7 @@ stock void KB_AddOfflineBan(const char[] TargetSteamID, const char[] TargetName,
 	
 	int time_stamp_end = GetTime() + ((time * 60));
 	
-	g_hDB.Format(sQuery, sizeof(sQuery), "INSERT INTO `KbRestrict_Bans` ("
+	g_hDB.Format(sQuery, sizeof(sQuery), "INSERT INTO `KbRestrict_CurrentBans` ("
 											... "`server_ip`, `client_name`, `client_ip`, `client_steamid`,"
 											... "`admin_name`, `admin_steamid`, `reason`,"
 											... "`map`, `length`, `time_stamp_start`, `time_stamp_end`) "
@@ -912,7 +937,7 @@ stock void KB_RemoveBanFromDB(const char[] TargetSteamID)
 		return;
 	
 	char sQuery[1024];
-	g_hDB.Format(sQuery, sizeof(sQuery), "DELETE FROM `KbRestrict_Bans` WHERE `client_steamid`='%s' and `server_ip`='%s'", TargetSteamID, ServerIP);
+	g_hDB.Format(sQuery, sizeof(sQuery), "DELETE FROM `KbRestrict_CurrentBans` WHERE `client_steamid`='%s' and `server_ip`='%s'", TargetSteamID, ServerIP);
 	
 	SQL_TQuery(g_hDB, SQL_RemoveBanFromDB, sQuery);
 	UpdateBannedIPs();
@@ -1073,6 +1098,12 @@ public Action Command_KbRestrict(int client, int args)
 	
 	if(g_bIsClientRestricted[target])
 	{
+		if(!client)
+		{
+			ReplyToCommand(client, "The secified target is aleady kbanned.");
+			return Plugin_Handled;
+		}
+		
 		CReplyToCommand(client, "%s %T", KB_Tag, "AlreadyKBanned", client);
 		return Plugin_Handled;
 	}
@@ -1136,6 +1167,12 @@ public Action Command_KbUnRestrict(int client, int args)
 	
 	if(!g_bIsClientRestricted[target])
 	{
+		if(!client)
+		{
+			ReplyToCommand(client, "The specified target is already kb-unrestricted.");
+			return Plugin_Handled;
+		}
+		
 		CReplyToCommand(client, "%s %T", KB_Tag, "AlreadyKUnbanned", client);
 		return Plugin_Handled;
 	}
@@ -1208,6 +1245,12 @@ public Action Command_OfflineKbRestrict(int client, int args)
 	
 	if(StrEqual(playerName, ""))
 	{
+		if(!client)
+		{
+			ReplyToCommand(client, "Please put the steamid between quotes");
+			return Plugin_Handled;
+		}
+		
 		CReplyToCommand(client, "%s %T", KB_Tag, "SteamID quotes", client);
 		return Plugin_Handled;
 	}
@@ -1230,6 +1273,12 @@ public Action Command_OfflineKbRestrict(int client, int args)
 	{
 		if(g_bIsClientRestricted[target])
 		{
+			if(!client)
+			{
+				ReplyToCommand(client, "The specified target is already kb-restricted.");
+				return Plugin_Handled;
+			}
+			
 			CReplyToCommand(client, "%s %T", KB_Tag, "AlreadyKBanned", client);
 			return Plugin_Handled;
 		}
@@ -1249,6 +1298,7 @@ public Action Command_OfflineKbRestrict(int client, int args)
 // MENUS RELATED STUFFS
 
 // Top menu
+/* the whole admin menu gets messed up: TODO : Fix it
 //----------------------------------------------------------------------------------------------------
 // Purpose:
 //----------------------------------------------------------------------------------------------------
@@ -1261,24 +1311,25 @@ public void OnLibraryRemoved(const char[] name)
 //----------------------------------------------------------------------------------------------------
 // Purpose:
 //----------------------------------------------------------------------------------------------------
+
 public void OnAdminMenuReady(Handle aTopMenu)
 {
 	TopMenu topmenu = TopMenu.FromHandle(aTopMenu);
 	
-	if(topmenu == g_hAdminMenu)
+	if(g_hAdminMenu == topmenu)
 		return;
 	
 	g_hAdminMenu = topmenu;
 	
-	TopMenuObject hMenuObj = AddToTopMenu(g_hAdminMenu, "KbRestrictCommands", TopMenuObject_Category, CategoryHandler, INVALID_TOPMENUOBJECT);
-	
+	TopMenuObject hMenuObj = g_hAdminMenu.AddCategory("KbRestrictCommands", CategoryHandler, "sm_koban", ADMFLAG_BAN);
+
 	if(hMenuObj == INVALID_TOPMENUOBJECT)
 		return;
 		
-	AddToTopMenu(g_hAdminMenu, "KbRestrict_RestrictPlayer", TopMenuObject_Item, ItemHandler_RestrictPlayer, hMenuObj, "", ADMFLAG_BAN);
-	AddToTopMenu(g_hAdminMenu, "KbRestrict_ListOfKbans", TopMenuObject_Item, ItemHandler_ListOfKbans, hMenuObj, "", ADMFLAG_RCON);
-	AddToTopMenu(g_hAdminMenu, "KbRestrict_OnlineKBanned", TopMenuObject_Item, ItemHandler_OnlineKBanned, hMenuObj, "", ADMFLAG_BAN);
-	AddToTopMenu(g_hAdminMenu, "KbRestrict_OwnBans", TopMenuObject_Item, ItemHandler_OwnBans, hMenuObj, "", ADMFLAG_BAN);
+	g_hAdminMenu.AddItem("KbRestrict_RestrictPlayer", ItemHandler_RestrictPlayer, hMenuObj, "sm_koban", ADMFLAG_BAN);
+	g_hAdminMenu.AddItem("KbRestrict_ListOfKbans", ItemHandler_ListOfKbans, hMenuObj, "sm_koban", ADMFLAG_BAN);
+	g_hAdminMenu.AddItem("KbRestrict_OnlineKBanned", ItemHandler_OnlineKBanned, hMenuObj, "sm_koban", ADMFLAG_BAN);
+	g_hAdminMenu.AddItem("KbRestrict_OwnBans", ItemHandler_OwnBans, hMenuObj, "sm_koban", ADMFLAG_BAN);
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -1293,11 +1344,11 @@ public void CategoryHandler(TopMenu topmenu,
 {
 	if(action == TopMenuAction_DisplayTitle)
 	{
-		Format(buffer, maxlength, "KbRestrict Commands Main Menu");
+		strcopy(buffer, maxlength, "KbRestrict Commands Main Menu");
 	}
 	else if(action == TopMenuAction_DisplayOption)
 	{
-		Format(buffer, maxlength, "KbRestrict Commands");
+		strcopy(buffer, maxlength, "KbRestrict Commands");
 	}
 }
 
@@ -1313,7 +1364,7 @@ public void ItemHandler_RestrictPlayer(TopMenu topmenu,
 {
 	if(action == TopMenuAction_DisplayOption)
 	{
-		Format(buffer, maxlength, "KBan a Player");
+		strcopy(buffer, maxlength, "KBan a Player");
 	}
 	else if(action == TopMenuAction_SelectOption)
 	{
@@ -1333,7 +1384,7 @@ public void ItemHandler_ListOfKbans(TopMenu topmenu,
 {
 	if(action == TopMenuAction_DisplayOption)
 	{
-		Format(buffer, maxlength, "List of KBans");
+		strcopy(buffer, maxlength, "List of KBans");
 	}
 	else if(action == TopMenuAction_SelectOption)
 	{
@@ -1353,7 +1404,7 @@ public void ItemHandler_OnlineKBanned(TopMenu topmenu,
 {
 	if(action == TopMenuAction_DisplayOption)
 	{
-		Format(buffer, maxlength, "Online KBanned");
+		strcopy(buffer, maxlength, "Online KBanned");
 	}
 	else if(action == TopMenuAction_SelectOption)
 	{
@@ -1373,13 +1424,14 @@ public void ItemHandler_OwnBans(TopMenu topmenu,
 {
 	if(action == TopMenuAction_DisplayOption)
 	{
-		Format(buffer, maxlength, "Your Own List of KBans");
+		strcopy(buffer, maxlength, "Your Own List of KBans");
 	}
 	else if(action == TopMenuAction_SelectOption)
 	{
 		DisplayKBan_Menu(param, .mode=MenuMode_OwnBans);
 	}
 }
+*/
 //----------------------------------------------------------------------------------------------------
 // Menu :
 //----------------------------------------------------------------------------------------------------		
@@ -1407,11 +1459,6 @@ public int Menu_KbRestrictList(Menu menu, MenuAction action, int param1, int par
 		case MenuAction_End:
 			delete menu;
 		
-		case MenuAction_Cancel:
-		{
-			if(param2 == MenuCancel_ExitBack && g_hAdminMenu != null)
-				DisplayTopMenu(g_hAdminMenu, param1, TopMenuPosition_LastCategory);
-		}
 		
 		case MenuAction_Select:
 		{
@@ -1545,7 +1592,7 @@ stock void DB_AddAllBansToMenu(int client)
 		return;
 		
 	char sQuery[1024];
-	g_hDB.Format(sQuery, sizeof(sQuery), "SELECT `client_name`, `client_steamid` FROM `KbRestrict_Bans` WHERE server_ip='%s'", ServerIP);
+	g_hDB.Format(sQuery, sizeof(sQuery), "SELECT `client_name`, `client_steamid` FROM `KbRestrict_CurrentBans` WHERE server_ip='%s'", ServerIP);
 	SQL_TQuery(g_hDB, SQL_AddAllBansToMenu, sQuery, GetClientUserId(client));
 }
 
@@ -1693,7 +1740,7 @@ stock void KB_AddActionsFromDBToMenu(int client, const char[] SteamID, int mode)
 	
 	char sQuery[1024];
 	g_hDB.Format(sQuery, sizeof(sQuery), "SELECT `client_name`, `admin_name`, `admin_steamid`, `reason`, `map`, `length`, `time_stamp_start`, `time_stamp_end`"
-											... "FROM `KbRestrict_Bans` WHERE client_steamid='%s' and server_ip='%s'", SteamID, ServerIP);
+											... "FROM `KbRestrict_CurrentBans` WHERE client_steamid='%s' and server_ip='%s'", SteamID, ServerIP);
 	
 	g_iClientMenuMode[client] = mode;
 	DataPack pack = new DataPack();
@@ -1839,7 +1886,7 @@ stock void DB_AddAdminBansToMenu(int client)
 	
 	char sQuery[1024];
 	g_hDB.Format(sQuery, sizeof(sQuery), "SELECT `client_name`, `client_steamid`"
-											... "FROM `KbRestrict_Bans` WHERE admin_steamid='%s' and server_ip='%s'", SteamID, ServerIP);
+											... "FROM `KbRestrict_CurrentBans` WHERE admin_steamid='%s' and server_ip='%s'", SteamID, ServerIP);
 							
 	SQL_TQuery(g_hDB, SQL_AddAdminBansToMenu, sQuery, GetClientUserId(client));
 }
@@ -1917,7 +1964,7 @@ stock void DB_AddAdminBansActionsToMenu(int client, const char[] TargetSteamID)
 	
 	char sQuery[1024];
 	g_hDB.Format(sQuery, sizeof(sQuery), "SELECT `client_name`, `reason`, `map`, `length`, `time_stamp_start`, `time_stamp_end`"
-											... "FROM `KbRestrict_Bans` WHERE admin_steamid='%s' and client_steamid='%s' and server_ip='%s'", SteamID, TargetSteamID, ServerIP);
+											... "FROM `KbRestrict_CurrentBans` WHERE admin_steamid='%s' and client_steamid='%s' and server_ip='%s'", SteamID, TargetSteamID, ServerIP);
 			
 	DataPack pack = new DataPack();
 	SQL_TQuery(g_hDB, SQL_AddAdminBansActionsToMenu, sQuery, pack);
