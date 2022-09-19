@@ -33,7 +33,7 @@ Database g_hDB;
 
 ArrayList g_aBannedIPs;
 
-// TopMenu g_hAdminMenu = null; TODO LIST: Fix topmenus 
+TopMenu g_hAdminMenu = null;
 
 // MAIN PLUGIN
 
@@ -116,12 +116,9 @@ public void OnPluginStart()
 		}
 	}
 	
-	/*
-	TODO: FIX IT
 	TopMenu topmenu;
 	if(LibraryExists("adminmenu") && ((topmenu = GetAdminTopMenu()) != null))
 		OnAdminMenuReady(topmenu);
-	*/ 
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -572,6 +569,7 @@ stock void DB_CreateTables()
 												... "PRIMARY KEY (`id`))");
 												
 		SQL_TQuery(g_hDB, SQL_TablesMySQLCallback, sQuery);
+		PrintToServer("It should now create table for mysql");
 	}
 	else if(StrEqual(sDriver, "sqlite", false))
 	{
@@ -591,6 +589,7 @@ stock void DB_CreateTables()
 												... "`time_stamp_end` INTEGER NOT NULL)");
 												
 		SQL_TQuery(g_hDB, SQL_TablesSQLiteCallback, sQuery);
+		PrintToServer("It should now create table for sqlite");
 	}
 }
 
@@ -1296,7 +1295,6 @@ public Action Command_OfflineKbRestrict(int client, int args)
 // MENUS RELATED STUFFS
 
 // Top menu
-/* the whole admin menu gets messed up: TODO : Fix it
 //----------------------------------------------------------------------------------------------------
 // Purpose:
 //----------------------------------------------------------------------------------------------------
@@ -1429,7 +1427,7 @@ public void ItemHandler_OwnBans(TopMenu topmenu,
 		DisplayKBan_Menu(param, .mode=MenuMode_OwnBans);
 	}
 }
-*/
+
 //----------------------------------------------------------------------------------------------------
 // Menu :
 //----------------------------------------------------------------------------------------------------		
