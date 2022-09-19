@@ -160,6 +160,9 @@ public void OnClientPutInServer(int client)
 //----------------------------------------------------------------------------------------------------
 public void OnClientConnected(int client)
 {
+	if(IsFakeClient(client))
+		return;
+		
 	char ClientIP[32];
 	GetClientIP(client, ClientIP, sizeof(ClientIP));
 	
@@ -185,6 +188,9 @@ public void OnClientDisconnect(int client)
 //----------------------------------------------------------------------------------------------------
 public void OnClientPostAdminCheck(int client)
 {
+	if(IsFakeClient(client))
+		return;
+		
 	KB_ApplyRestrict(client);
 }
 
@@ -297,7 +303,7 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 //----------------------------------------------------------------------------------------------------
 stock bool IsValidClient(int client)
 {
-	return (1 <= client <= MaxClients && IsClientInGame(client) && !IsClientSourceTV(client));
+	return (1 <= client <= MaxClients && IsClientInGame(client) && !IsClientSourceTV(client) && !IsFakeClient(client));
 }
 
 //----------------------------------------------------------------------------------------------------
