@@ -574,8 +574,7 @@ stock void DB_CreateTables()
 												... "`time_stamp_end` int NOT NULL,"
 												... "PRIMARY KEY (`id`))");
 												
-		SQL_TQuery(g_hDB, SQL_TablesMySQLCallback, sQuery);
-		PrintToServer("It should now create table for mysql");
+		SQL_TQuery(g_hDB, SQL_TablesMySQLCallback, sQuery);												
 	}
 	else if(StrEqual(sDriver, "sqlite", false))
 	{
@@ -595,7 +594,6 @@ stock void DB_CreateTables()
 												... "`time_stamp_end` INTEGER NOT NULL)");
 												
 		SQL_TQuery(g_hDB, SQL_TablesSQLiteCallback, sQuery);
-		PrintToServer("It should now create table for sqlite");
 	}
 }
 
@@ -984,6 +982,9 @@ public Action OnClientSayCommand(int client, const char[] command, const char[] 
 		return Plugin_Continue;
 		
 	int target = GetClientOfUserId(g_iClientTargets[client]);
+	if(!target)
+		return Plugin_Continue;
+		
 	int length = g_iClientTargetsLength[client];
 
 	if(StrEqual(command, "say") || StrEqual(command, "say_team"))
@@ -1574,6 +1575,9 @@ public int Menu_KbanHandler(Menu menu, MenuAction action, int param1, int param2
 			int userid = StringToInt(ExBuffer[1]);
 			int target = GetClientOfUserId(userid);
 			
+			if(!target)
+				return 0;
+			
 			if(num == 0)
 			{
 				g_iClientTargets[param1] = userid;
@@ -1604,9 +1608,12 @@ public void SQL_AddAllBansToMenu(Handle hDatabase, Handle hResults, const char[]
 		LogError("Error: %s", sError);
 		
 	int client = GetClientOfUserId(userid);
-	if(!IsClientInGame(client) || client < 1)
+	if(client < 1)
 		return;
 	
+	if(!IsClientInGame(client))
+		return;
+		
 	if(hResults == null)
 		return;
 	
@@ -1720,6 +1727,9 @@ public int Menu_ActionsHandler(Menu menu, MenuAction action, int param1, int par
 			menu.GetItem(param2, buffer, sizeof(buffer));
 			int target = GetClientOfUserId(StringToInt(buffer));
 			
+			if(!target)
+				return 0;
+				
 			if(!IsValidClient(target))
 				CPrintToChat(param1, "%s %T", KB_Tag, "PlayerNotValid", param1);
 			
@@ -1758,6 +1768,10 @@ public void SQL_AddActionsFromDBToMenu(Handle hDatabase, Handle hResults, const 
 	int client = GetClientOfUserId(pack.ReadCell());
 	pack.ReadString(SteamID, sizeof(SteamID));
 	delete pack;
+	
+	if(!client)
+		return;
+		
 	if(!IsClientInGame(client))
 		return;
 	
@@ -1899,6 +1913,9 @@ public void SQL_AddAdminBansToMenu(Handle hDatabase, Handle hResults, const char
 		LogError("Error: %s", sError);
 		
 	int client = GetClientOfUserId(userid);
+	if(!client)
+		return;
+		
 	if(!IsClientInGame(client))
 		return;
 	
@@ -1982,6 +1999,9 @@ public void SQL_AddAdminBansActionsToMenu(Handle hDatabase, Handle hResults, con
 	pack.ReadString(TargetSteamID, sizeof(TargetSteamID));
 	delete pack;
 	
+	if(!client)
+		return;
+		
 	if(!IsClientInGame(client))
 		return;
 	
@@ -2208,7 +2228,11 @@ public int Menu_KbRestrict_Lengths(Menu menu, MenuAction action, int param1, int
 			menu.GetItem(param2, buffer, sizeof(buffer));
 			int time = StringToInt(buffer);
 			
-			if(IsValidClient(GetClientOfUserId(g_iClientTargets[param1])))
+			int target = GetClientOfUserId(g_iClientTargets[param1]);
+			if(!target)
+				return 0;
+				
+			if(IsValidClient(target))
 			{
 				g_iClientTargetsLength[param1] = time;
 				DisplayReasons_Menu(param1);
@@ -2268,8 +2292,11 @@ public int Menu_Reasons(Menu menu, MenuAction action, int param1, int param2)
 			if(param2 == MenuCancel_ExitBack)
 			{
 				g_bIsClientTypingReason[param1] = false;
-				
-				if(IsValidClient(GetClientOfUserId(g_iClientTargets[param1])))
+				int target = GetClientOfUserId(g_iClientTargets[param1]);
+				if(!target)
+					return 0;
+					
+				if(IsValidClient(target))
 					DisplayLengths_Menu(param1);
 				else
 					CPrintToChat(param1, "%s %T", KB_Tag, "PlayerNotValid", param1);
@@ -2278,11 +2305,15 @@ public int Menu_Reasons(Menu menu, MenuAction action, int param1, int param2)
 		
 		case MenuAction_Select:
 		{
+			int target = GetClientOfUserId(g_iClientTargets[param1]);
+			if(!target)
+					return 0;
+					
 			if(param2 == 4)
-			{
-				if(IsValidClient(GetClientOfUserId(g_iClientTargets[param1])))
+			{			
+				if(IsValidClient(target))
 				{
-					if(!g_bIsClientRestricted[GetClientOfUserId(g_iClientTargets[param1])])
+					if(!g_bIsClientRestricted[target])
 					{
 						CPrintToChat(param1, "%s %T.", KB_Tag, "ChatReason", param1);
 						g_bIsClientTypingReason[param1] = true;
@@ -2298,8 +2329,8 @@ public int Menu_Reasons(Menu menu, MenuAction action, int param1, int param2)
 				char buffer[128];
 				menu.GetItem(param2, buffer, sizeof(buffer));
 				
-				if(IsValidClient(GetClientOfUserId(g_iClientTargets[param1])))
-					KB_RestrictPlayer(GetClientOfUserId(g_iClientTargets[param1]), param1, g_iClientTargetsLength[param1], buffer);
+				if(IsValidClient(target))
+					KB_RestrictPlayer(target, param1, g_iClientTargetsLength[param1], buffer);
 			}
 		}
 	}
