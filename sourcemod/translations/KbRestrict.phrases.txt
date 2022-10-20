@@ -71,4 +71,13 @@
 		"#format"	"{1:s},{2:s},{3:d},{4:s}"
 		"en"		"Successfully Added Kb-Restrict ban on {white}{1}{green}[{white}{2}{green}]{darkblue} for {white}{3} {darkblue}minutes ({green}reason: {4}{darkblue})."
 	}
+	"Not have permission pKBan"
+	{
+		"en" 		"You do not have permission to permanently Kb-Restrict"
+	}
+	"Not have permission lKBan"
+	{
+		"#format"	"{1:d}"
+		"en" 		"You do not have permission to Kb-Restrict longer than {1} minutes"
+	}
 }
