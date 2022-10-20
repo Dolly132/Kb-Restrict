@@ -320,7 +320,7 @@ stock void FormatClientTeam(int client, char[] buf, int maxlen)
 //----------------------------------------------------------------------------------------------------
 public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
-	if((g_bKnifeModeEnabled == false)
+	if(g_bKnifeModeEnabled == false)
 	{
 		if(IsValidClient(victim) && IsValidClient(attacker) && attacker != victim)
 		{
