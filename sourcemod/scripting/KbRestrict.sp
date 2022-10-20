@@ -78,7 +78,7 @@ public Plugin myinfo =
 	name = "Kb-Restrict",
 	author = "Dolly, .Rushaway",
 	description = "Block certain weapons damage from the KBanned players",
-	version = "3.1",
+	version = "3.2",
 	url = "https://nide.gg"
 }
 
@@ -1579,7 +1579,10 @@ stock void DisplayKBan_Menu(int client, int mode)
 	if(!GetClientAuthId(client, AuthId_Steam2, SteamID, sizeof(SteamID)))
 		return;
 		
-	Menu menu = new Menu(Menu_KbanHandler);
+	Menu menu;
+	if(mode == MenuMode_RestrictPlayer || mode == MenuMode_OnlineBans)	
+		menu = new Menu(Menu_KbanHandler);
+		
 	switch(mode)
 	{
 		case MenuMode_RestrictPlayer:
@@ -1596,6 +1599,10 @@ stock void DisplayKBan_Menu(int client, int mode)
 					menu.AddItem(MenuBuffer, MenuText);
 				}
 			}
+			
+			menu.ExitBackButton = true;
+			menu.Display(client, MENU_TIME_FOREVER);
+			return;
 		}
 		
 		case MenuMode_AllBans:
@@ -1623,6 +1630,10 @@ stock void DisplayKBan_Menu(int client, int mode)
 			}
 			else if(GetCurrent_KbRestrict_Players() <= 0)
 				menu.AddItem("", "No KBan", ITEMDRAW_DISABLED);
+				
+			menu.ExitBackButton = true;
+			menu.Display(client, MENU_TIME_FOREVER);
+			return;
 		}
 
 		case MenuMode_OwnBans:
@@ -1631,9 +1642,6 @@ stock void DisplayKBan_Menu(int client, int mode)
 			return;
 		}
 	}
-		
-	menu.ExitBackButton = true;
-	menu.Display(client, MENU_TIME_FOREVER);
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -1766,15 +1774,15 @@ stock void KB_ShowBanDetails(int client, int target)
 	if(!g_bIsClientRestricted[target])
 		return;
 	
-	Menu menu = new Menu(Menu_ActionsHandler);
-	char sTitle[124], MenuText[124], MenuBuffer[32];
-	Format(sTitle, sizeof(sTitle), "KBan Details for %N", target);
-	menu.SetTitle(sTitle);
-	menu.ExitBackButton = true;		
-	IntToString(GetClientUserId(target), MenuBuffer, sizeof(MenuBuffer));	
-	
 	if(g_PlayerData[target].BanDuration == -1) // player kbanned temporarily
-	{		
+	{
+		Menu menu = new Menu(Menu_ActionsHandler);
+		char sTitle[124], MenuText[124], MenuBuffer[32];
+		Format(sTitle, sizeof(sTitle), "KBan Details for %N", target);
+		menu.SetTitle(sTitle);
+		menu.ExitBackButton = true;		
+		IntToString(GetClientUserId(target), MenuBuffer, sizeof(MenuBuffer));
+		
 		Format(MenuText, sizeof(MenuText), "Player Name : %N", target);
 		menu.AddItem("", MenuText, ITEMDRAW_DISABLED);
 		Format(MenuText, sizeof(MenuText), "Admin Name : %s", g_PlayerData[target].AdminName);
@@ -1933,9 +1941,9 @@ public void SQL_AddActionsFromDBToMenu(Handle hDatabase, Handle hResults, const 
 			bCanUnban = true;
 			
 		menu.AddItem(MenuBuffer, "Kb-UnRestrict Player", (bCanUnban) ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
-		menu.Display(client, MENU_TIME_FOREVER);
 	}
-		
+	
+	menu.Display(client, MENU_TIME_FOREVER);	
 }
 
 public int Menu_ActionsHandlerAll(Menu menu, MenuAction action, int param1, int param2)
@@ -2156,8 +2164,9 @@ public void SQL_AddAdminBansActionsToMenu(Handle hDatabase, Handle hResults, con
 		Format(sTitle2, sizeof(sTitle2), "KBan Details for %s[%s]", TargetName, TargetSteamID);
 		menu.SetTitle(sTitle2);
 		menu.AddItem(MenuBuffer, "Kb-UnRestrict Player");
-		menu.Display(client, MENU_TIME_FOREVER);
 	}
+	
+	menu.Display(client, MENU_TIME_FOREVER);
 }
 
 public int Menu_AdminBansActionsHandler(Menu menu, MenuAction action, int param1, int param2)
