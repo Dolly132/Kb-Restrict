@@ -14,32 +14,38 @@
 #define MenuMode_AllBans 2
 #define MenuMode_OwnBans 3
 
-int g_iClientTargets[MAXPLAYERS + 1] = { -1, ... };
-int g_iClientTargetsLength[MAXPLAYERS + 1] = { -1, ... };
-int g_iClientMenuMode[MAXPLAYERS + 1] = {-1, ...};
-
-bool g_bKnifeModeEnabled;
-bool g_bIsClientRestricted[MAXPLAYERS + 1] = {false, ...};
-bool g_bIsClientTypingReason[MAXPLAYERS + 1] = { false, ... };
-
-char ServerIP[32];
-
-ConVar g_cvDefaultLength = null;
-ConVar g_cvAddBanLength = null;
-ConVar g_cvNetPublicAddr = null;
-ConVar g_cvPort = null;
-
-Database g_hDB;
-
+/* Array handle */
 ArrayList g_aBannedIPs;
 
+/* Admin Menu */
 TopMenu g_hAdminMenu = null;
 
-// MAIN PLUGIN
+/* Cvar handle */
+ConVar
+	g_cvDefaultLength = null
+	, g_cvAddBanLength = null
+	, g_cvNetPublicAddr = null
+	, g_cvPort = null
+	, g_hCvar_MaxBanTime
+	, g_hCVar_Debug;
 
-//----------------------------------------------------------------------------------------------------
-// Purpose:
-//----------------------------------------------------------------------------------------------------
+/* Database handle */
+Database g_hDB;
+
+char
+	ServerIP[32];
+
+float RetryTime = 15.0;
+
+bool
+	g_bKnifeModeEnabled
+	, g_bIsClientRestricted[MAXPLAYERS + 1] = {false, ...}
+	, g_bIsClientTypingReason[MAXPLAYERS + 1] = { false, ... };
+
+int
+	g_iClientTargets[MAXPLAYERS + 1] = { -1, ... }
+	, g_iClientTargetsLength[MAXPLAYERS + 1] = { -1, ... }
+	, g_iClientMenuMode[MAXPLAYERS + 1] = {-1, ...};
 
 enum struct PlayerData
 {
@@ -64,29 +70,52 @@ enum struct PlayerData
 		this.MapIssued[0] = '\0';
 	}
 }
-	
+
 PlayerData g_PlayerData[MAXPLAYERS + 1];
 
 public Plugin myinfo = 
 {
 	name = "Kb-Restrict",
 	author = "Dolly, .Rushaway",
-	description = "Block certain weapons damage from the  KBanned players",
-	version = "3.0",
+	description = "Block certain weapons damage from the KBanned players",
+	version = "3.1",
 	url = "https://nide.gg"
+}
+
+//----------------------------------------------------------------------------------------------------
+// Forwards :
+//----------------------------------------------------------------------------------------------------
+public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
+{
+	RegPluginLibrary("KbRestrict");
+
+	CreateNative("Kb_BanClient", Native_KB_BanClient);
+	CreateNative("Kb_UnBanClient", Native_KB_UnBanClient);
+	CreateNative("Kb_ClientStatus", Native_KB_ClientStatus);
+	
+	return APLRes_Success;
 }
 
 //----------------------------------------------------------------------------------------------------
 // Purpose:
 //----------------------------------------------------------------------------------------------------
-
 public void OnPluginStart()
 {
 	LoadTranslations("KbRestrict.phrases");
 	LoadTranslations("common.phrases");
 
-	g_cvDefaultLength = CreateConVar("sm_kbrestrict_length", "30", "Default length when no length is specified");
-	g_cvAddBanLength = CreateConVar("sm_kbrestrict_addban_length", "10080", "The Maximume length for offline KbRestrict command");
+	RegAdminCmd("sm_kban", Command_KbRestrict, ADMFLAG_BAN, "sm_kban <#userid|name> <minutes|0> [reason]");
+	RegAdminCmd("sm_kunban", Command_KbUnRestrict, ADMFLAG_BAN, "sm_kunban <#userid|name> [reason]");
+	RegAdminCmd("sm_koban", Command_OfflineKbRestrict, ADMFLAG_BAN, "sm_koban <#userid|name> <minutes|0> [reason]");
+	RegConsoleCmd("sm_kstatus", Command_CheckKbStatus, "Shows current player Kb-Restrict status");
+	RegConsoleCmd("sm_kbanstatus", Command_CheckKbStatus, "Shows current player Kb-Restrict status");
+
+	g_cvDefaultLength 	= CreateConVar("sm_kbrestrict_length", "30", "Default length when no length is specified");
+	g_cvAddBanLength 	= CreateConVar("sm_kbrestrict_addban_length", "133920", "The Maximume length for offline KbRestrict command");
+	g_hCvar_MaxBanTime	= CreateConVar("sm_kbrestrict_max_bantime", "133920", "Maximum ban time allowed via console command (0-518400)", _, true, 0.0, true, 518400.0);
+	g_hCVar_Debug 		= CreateConVar("sm_kbrestrict_debug_level", "1", "[0 = Disabled | 1 = Errors | 2 = Infos]", FCVAR_REPLICATED);
+
+	AutoExecConfig(true);
 	
 	g_cvNetPublicAddr = FindConVar("net_public_adr");
 	if(g_cvNetPublicAddr == null)
@@ -99,12 +128,9 @@ public void OnPluginStart()
 	g_cvPort.GetString(sPort, sizeof(sPort));
 	
 	Format(ServerIP, sizeof(ServerIP), "%s:%s", sNet, sPort);
-	
-	KBan_Database_PluginStart();
-	
-	KBan_Commands_PluginStart();
-	
-	AutoExecConfig(true);
+
+	ConnectToDB();
+	CreateTimer(2.0, Timer_BansChecker, _, TIMER_REPEAT);
 	
 	for (int i = 1; i <= MaxClients; i++)
 	{
@@ -282,14 +308,23 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 			{
 				char sWeapon[32];
 				GetClientWeapon(attacker, sWeapon, 32);
-				if (StrEqual(sWeapon, "weapon_knife")) // Knife
+
+				/* Knife */
+				if (StrEqual(sWeapon, "weapon_knife"))
 					damage -= (damage * 0.95);
-				if (StrEqual(sWeapon, "weapon_m3") || StrEqual(sWeapon, "weapon_xm1014")) // ShotGuns
+
+				/* ShotGuns */
+				if (StrEqual(sWeapon, "weapon_m3") || StrEqual(sWeapon, "weapon_xm1014"))
 					damage -= (damage * 0.80);
-				if (StrEqual(sWeapon, "weapon_awp") || StrEqual(sWeapon, "weapon_scout")) // Snipers
+
+				/* Snipers */
+				if (StrEqual(sWeapon, "weapon_awp") || StrEqual(sWeapon, "weapon_scout"))
 					damage -= (damage * 0.60);
-				if (StrEqual(sWeapon, "weapon_sg550") || StrEqual(sWeapon, "weapon_g3sg1")) // SemiAuto-Snipers
+
+				/* Semi-Auto Snipers */
+				if (StrEqual(sWeapon, "weapon_sg550") || StrEqual(sWeapon, "weapon_g3sg1"))
 					damage -= (damage * 0.40);
+
 				return Plugin_Changed;
 			}
 		}
@@ -304,20 +339,6 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 stock bool IsValidClient(int client)
 {
 	return (1 <= client <= MaxClients && IsClientInGame(client) && !IsClientSourceTV(client) && !IsFakeClient(client));
-}
-
-//----------------------------------------------------------------------------------------------------
-// Forwards :
-//----------------------------------------------------------------------------------------------------
-public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
-{
-	RegPluginLibrary("KbRestrict");
-
-	CreateNative("Kb_BanClient", Native_KB_BanClient);
-	CreateNative("Kb_UnBanClient", Native_KB_UnBanClient);
-	CreateNative("Kb_ClientStatus", Native_KB_ClientStatus);
-	
-	return APLRes_Success;
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -367,25 +388,53 @@ public int Native_KB_ClientStatus(Handle plugin, int params)
 	return g_bIsClientRestricted[client];
 }
 
-// DATABASE RELATED STUFFS
-
-stock void KBan_Database_PluginStart()
+//----------------------------------------------------------------------------------------------------
+// Database Attempting Connection :
+//----------------------------------------------------------------------------------------------------
+stock void ConnectToDB()
 {
-	char sError[256];
-	g_hDB = SQL_Connect("dev_selfmute", true, sError, sizeof(sError));
+	Database.Connect(DB_OnConnect, "KbRestrict");
+}
+
+//----------------------------------------------------------------------------------------------------
+// Database Connection Status :
+//----------------------------------------------------------------------------------------------------
+public void DB_OnConnect(Database db, const char[] sError, any data)
+{
+	if(db == null || sError[0])
+	{
+		if (RetryTime <= 15.0)
+			RetryTime = 15.0;
+		else if (RetryTime > 60.0)
+			RetryTime = 60.0;
 		
-	if(g_hDB == null)
-	{
-		LogError("[Kb-Restrict] Couldn't connect to database, error: %s", sError);
-	}
-	else
-	{
-		LogMessage("[Kb-Restrict] Successfully connected to database.");
-		DB_CreateTables();
-		g_hDB.SetCharset("utf8");
+		/* Failure happen. Do retry with delay */
+		CreateTimer(RetryTime, DB_RetryConnection);
+		
+		if (g_hCVar_Debug.IntValue >= 1)
+		{
+			int RetryTimeInt = RoundToFloor(RetryTime);
+			LogError("[Kb-Restrict] Couldn't connect to database `KbRestrict`, retrying in %d seconds. \nError: %s", RetryTimeInt, sError);
+		}
+
+		return;
 	}
 	
-	CreateTimer(1.0, Timer_BansChecker, _, TIMER_REPEAT);
+	LogMessage("[Kb-Restrict] Successfully connected to database!");
+	g_hDB = db;
+	g_hDB.SetCharset("utf8");
+	DB_CreateTables();
+}
+
+//----------------------------------------------------------------------------------------------------
+// Database Attempting Reconnect :
+//----------------------------------------------------------------------------------------------------
+public Action DB_RetryConnection(Handle timer)
+{
+    if(g_hDB == null)
+        ConnectToDB();
+    
+    return Plugin_Continue;
 }
 
 public Action Timer_BansChecker(Handle timer)
@@ -443,7 +492,7 @@ stock void UpdateBannedIPs()
 }
 
 //----------------------------------------------------------------------------------------------------
-// Database:
+// Database :
 //----------------------------------------------------------------------------------------------------
 public void SQL_AddBannedIPsToArray(Handle hDatabase, Handle hResults, const char[] sError, any data)
 {
@@ -460,7 +509,7 @@ public void SQL_AddBannedIPsToArray(Handle hDatabase, Handle hResults, const cha
 }
 
 //----------------------------------------------------------------------------------------------------
-// Purpose:
+// Purpose :
 //----------------------------------------------------------------------------------------------------
 stock void KB_ApplyRestrict(int client)
 {
@@ -510,10 +559,12 @@ public void SQL_ApplyRestrict(Handle hDatabase, Handle hResults, const char[] sE
 	char buffer[256];
 	while(SQL_FetchRow(hResults))
 	{
-		// get target data from database:
+		/* Get target data from Database */
 		
-		SQL_FetchString(hResults, 0, buffer, sizeof(buffer)); // Client Ip
-		// Let's check if client's ip is unknow then update it to database
+		/* Client IP */
+		SQL_FetchString(hResults, 0, buffer, sizeof(buffer));
+
+		/* Check client IP, then update Database data */
 		if(StrEqual(buffer, "UnKnown"))
 		{
 			char sQuery[1024];
@@ -522,19 +573,31 @@ public void SQL_ApplyRestrict(Handle hDatabase, Handle hResults, const char[] sE
 		}
 		else
 			Format(g_PlayerData[client].ClientIP, 32, "%s", buffer);
-			
-		SQL_FetchString(hResults, 1, buffer, sizeof(buffer)); // Admin Name
+
+		/* Admin Name */
+		SQL_FetchString(hResults, 1, buffer, sizeof(buffer));
 		Format(g_PlayerData[client].AdminName, 32, "%s", buffer);
-		SQL_FetchString(hResults, 2, buffer, sizeof(buffer)); // Admin SteamID
+
+		/* Admin SteamID */
+		SQL_FetchString(hResults, 2, buffer, sizeof(buffer));
 		Format(g_PlayerData[client].AdminSteamID, 32, "%s", buffer);
-		SQL_FetchString(hResults, 3, buffer, sizeof(buffer)); // Reason
+
+		/* Reason */
+		SQL_FetchString(hResults, 3, buffer, sizeof(buffer));
 		Format(g_PlayerData[client].Reason, 124, "%s", buffer);
-		SQL_FetchString(hResults, 4, buffer, sizeof(buffer)); // Map
+
+		/* Map */
+		SQL_FetchString(hResults, 4, buffer, sizeof(buffer));
 		Format(g_PlayerData[client].MapIssued, 124, "%s", buffer);
 		
-		g_PlayerData[client].BanDuration = SQL_FetchInt(hResults, 5); // length
-		g_PlayerData[client].TimeStamp_Start = SQL_FetchInt(hResults, 6); // time_stamp_start
-		g_PlayerData[client].TimeStamp_End = SQL_FetchInt(hResults, 7); // time_stamp_end
+		/* Length */
+		g_PlayerData[client].BanDuration = SQL_FetchInt(hResults, 5);
+
+		/* Time_stamp_start */
+		g_PlayerData[client].TimeStamp_Start = SQL_FetchInt(hResults, 6);
+
+		/* Time_stamp_end */
+		g_PlayerData[client].TimeStamp_End = SQL_FetchInt(hResults, 7);
 		
 		g_bIsClientRestricted[client] = true;
 	}
@@ -542,8 +605,8 @@ public void SQL_ApplyRestrict(Handle hDatabase, Handle hResults, const char[] sE
 	
 public void SQL_AddClientIPToDB(Handle hDatabase, Handle hResults, const char[] sError, any data)
 {
-	if(sError[0])
-		LogError("[Kb-Restrict] Error while updating client ip, error: %s", sError);
+	if(sError[0] && g_hCVar_Debug.IntValue >= 1)
+		LogError("[Kb-Restrict] Error while updating client IP. \nError: %s", sError);
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -558,6 +621,9 @@ stock void DB_CreateTables()
 	g_hDB.Driver.GetIdentifier(sDriver, sizeof(sDriver));
 	if(StrEqual(sDriver, "mysql", false))
 	{
+		if (g_hCVar_Debug.IntValue >= 2)
+			LogMessage("[Kb-Restrict] Attempting to create table.. (MYSQL)");
+
 		char sQuery[1024];
 		g_hDB.Format(sQuery, sizeof(sQuery), "CREATE TABLE IF NOT EXISTS `KbRestrict_CurrentBans`"
 												... "(`id` int(11) unsigned NOT NULL auto_increment,"
@@ -574,10 +640,13 @@ stock void DB_CreateTables()
 												... "`time_stamp_end` int NOT NULL,"
 												... "PRIMARY KEY (`id`))");
 												
-		SQL_TQuery(g_hDB, SQL_TablesMySQLCallback, sQuery);												
+		SQL_TQuery(g_hDB, SQL_TablesMySQLCallback, sQuery);
 	}
 	else if(StrEqual(sDriver, "sqlite", false))
 	{
+		if (g_hCVar_Debug.IntValue >= 2)
+			LogMessage("[Kb-Restrict] Attempting to create table.. (SQLITE)");
+
 		char sQuery[1024];
 		g_hDB.Format(sQuery, sizeof(sQuery), "CREATE TABLE IF NOT EXISTS `KbRestrict_CurrentBans`"
 												... "(`id` INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -595,6 +664,12 @@ stock void DB_CreateTables()
 												
 		SQL_TQuery(g_hDB, SQL_TablesSQLiteCallback, sQuery);
 	}
+	else
+	{
+		if (g_hCVar_Debug.IntValue >= 1)
+			LogError("[Self-Mute] Couldn't create tables for an unknown driver.");
+		return;
+	}
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -605,10 +680,10 @@ public void SQL_TablesMySQLCallback(Handle hDatabase, Handle hResults, const cha
 	if(hResults == null)
 		return;
 		
-	if(sError[0])
-		LogError("[Kb-Restrict] Couldn't Create mysql tables for database, error: %s", sError);
-	else
-		LogMessage("[Kb-Restrict] Successfully Created mysql tables for database.");
+	if(sError[0] && g_hCVar_Debug.IntValue >= 1)
+		LogError("[Kb-Restrict] Couldn't create tables for MYSQL. \nError: %s", sError);
+	else if (g_hCVar_Debug.IntValue >= 2)
+		LogMessage("[Kb-Restrict] Successfully created tables for MYSQL.");
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -619,10 +694,10 @@ public void SQL_TablesSQLiteCallback(Handle hDatabase, Handle hResults, const ch
 	if(hResults == null)
 		return;
 		
-	if(sError[0])
-		LogError("[Kb-Restrict] Couldn't Create sqlite tables for database, error: %s", sError);
-	else
-		LogMessage("[Kb-Restrict] Successfully Created sqlite tables for database.");
+	if(sError[0] && g_hCVar_Debug.IntValue >= 1)
+		LogError("[Kb-Restrict] Couldn't create tables for SQLITE. \nError: %s", sError);
+	else if (g_hCVar_Debug.IntValue >= 2)
+		LogMessage("[Kb-Restrict] Successfully created tables for SQLITE.");
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -651,7 +726,7 @@ stock void KB_RestrictPlayer(int iTarget, int iAdmin, int time, const char[] rea
 		Format(g_PlayerData[iTarget].Reason, sizeof(PlayerData::Reason), reason);
 		Format(g_PlayerData[iTarget].AdminSteamID, sizeof(PlayerData::AdminSteamID), AdminSteamID);
 		CPrintToChatAll("%s %T", KB_Tag, "RestrictedTemp", iAdmin, iAdmin, iTarget, KB_Tag, reason);
-		LogAction(iAdmin, iTarget, "[Kb-Restrict] \"%L\" has Kb-Restricted \"%L\" Temporarily (reason: %s)", iAdmin, iTarget, reason);
+		LogAction(iAdmin, iTarget, "[Kb-Restrict] \"%L\" has Kb-Restricted \"%L\" Temporarily. \nReason: %s", iAdmin, iTarget, reason);
 		return;
 	}
 	
@@ -677,7 +752,7 @@ stock void KB_RestrictPlayer(int iTarget, int iAdmin, int time, const char[] rea
 		g_bIsClientRestricted[iTarget] = true;
 		
 		CPrintToChatAll("%s %T", KB_Tag, "RestrictedTemp", iAdmin, iAdmin, iTarget, KB_Tag, reason);
-		LogAction(iAdmin, iTarget, "[Kb-Restrict] \"%L\" has Kb-Restricted \"%L\" Temporarily (reason: %s)", iAdmin, iTarget, reason);
+		LogAction(iAdmin, iTarget, "[Kb-Restrict] \"%L\" has Kb-Restricted \"%L\" Temporarily. \nReason: %s", iAdmin, iTarget, reason);
 		return;
 	}
 	else if(time >= 0)
@@ -732,10 +807,10 @@ stock void KB_RestrictPlayer(int iTarget, int iAdmin, int time, const char[] rea
 			SQL_TQuery(g_hDB, SQL_AddBan, sQuery);
 			
 			CPrintToChatAll("%s %T", KB_Tag, "Restricted", iAdmin, iAdmin, iTarget, time, KB_Tag, reason);
-			LogAction(iAdmin, iTarget, "[Kb-Restrict] \"%L\" has Kb-Restricted \"%L\" for \"%d\" minutes (reason: %s)", iAdmin, iTarget, time, reason);
+			LogAction(iAdmin, iTarget, "[Kb-Restrict] \"%L\" has Kb-Restricted \"%L\" for \"%d\" minutes. \nReason: %s", iAdmin, iTarget, time, reason);
 		}
 		else if(time == 0)
-		{
+		{		
 			g_PlayerData[iTarget].BanDuration = 0;
 			Format(g_PlayerData[iTarget].ClientIP, 32, TargetIP);
 			Format(g_PlayerData[iTarget].AdminName, 32, sAdminName);
@@ -747,7 +822,7 @@ stock void KB_RestrictPlayer(int iTarget, int iAdmin, int time, const char[] rea
 			Format(g_PlayerData[iTarget].Reason, sizeof(PlayerData::Reason), reason);
 			Format(g_PlayerData[iTarget].AdminSteamID, sizeof(PlayerData::AdminSteamID), AdminSteamID);
 			CPrintToChatAll("%s %T", KB_Tag, "RestrictedPerma", iAdmin, iAdmin, iTarget, KB_Tag, reason);
-			LogAction(iAdmin, iTarget, "[Kb-Restrict] \"%L\" has Kb-Restricted \"%L\" Permanently (reason: %s)", iAdmin, iTarget, reason);
+			LogAction(iAdmin, iTarget, "[Kb-Restrict] \"%L\" has Kb-Restricted \"%L\" Permanently. \nReason: %s", iAdmin, iTarget, reason);
 			
 			//Add perma ban to database:
 		
@@ -774,10 +849,10 @@ stock void KB_RestrictPlayer(int iTarget, int iAdmin, int time, const char[] rea
 //----------------------------------------------------------------------------------------------------
 public void SQL_AddBan(Handle hDatabase, Handle hResults, const char[] sError, any data)
 {
-	if(sError[0])
-		LogError("[Kb-Restrict] Error while adding ban to database, error: %s", sError);
-	else
-		LogMessage("[Kb-Restrict] Successfully added ban to database");
+	if(sError[0] && g_hCVar_Debug.IntValue >= 1)
+		LogError("[Kb-Restrict] Error while adding ban to database. \nError: %s", sError);
+	else if (g_hCVar_Debug.IntValue >= 2)
+		LogMessage("[Kb-Restrict] Successfully added Kban to database.");
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -785,10 +860,10 @@ public void SQL_AddBan(Handle hDatabase, Handle hResults, const char[] sError, a
 //----------------------------------------------------------------------------------------------------
 public void SQL_AddPermaBan(Handle hDatabase, Handle hResults, const char[] sError, any data)
 {
-	if(sError[0])
-		LogError("[Kb-Restrict] Error while adding perma ban to database, error: %s", sError);
-	else
-		LogMessage("[Kb-Restrict] Successfully added perma ban to database");
+	if(sError[0] && g_hCVar_Debug.IntValue >= 1)
+		LogError("[Kb-Restrict] Error while adding permanent Kban to database. \nError: %s", sError);
+	else if (g_hCVar_Debug.IntValue >= 2)
+		LogMessage("[Kb-Restrict] Successfully added permanent Kban to database.");
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -801,7 +876,7 @@ stock void KB_UnRestrictPlayer(int iTarget, int iAdmin, const char[] reason = "N
 		
 	g_bIsClientRestricted[iTarget] = false;
 	CPrintToChatAll("%s %T", KB_Tag, "UnRestricted", iAdmin, iAdmin, iTarget, KB_Tag, reason);
-	LogAction(iAdmin, iTarget, "[Kb-Restrict] \"%L\" has Kb-UnRestricted \"%L\" (reason: %s)", iAdmin, iTarget, reason);
+	LogAction(iAdmin, iTarget, "[Kb-Restrict] \"%L\" has Kb-UnRestricted \"%L\". \nReason: %s", iAdmin, iTarget, reason);
 	
 	char SteamID[32];
 	if(!GetClientAuthId(iTarget, AuthId_Steam2, SteamID, sizeof(SteamID)))
@@ -912,7 +987,7 @@ stock void KB_AddOfflineBan(const char[] TargetSteamID, const char[] TargetName,
 	else
 		CPrintToChat(iAdmin, "%s %T", KB_Tag, "OfflineBan", iAdmin, TargetName, TargetSteamID, time, sReason);
 		
-	LogAction(iAdmin, -1, "[Kb-Restrict] \"%L\" Added Offline Kb-Restrict on SteamID(\"%s\") with Name(\"%s\") for \"%d\" (reason: \"%s\")",
+	LogAction(iAdmin, -1, "[Kb-Restrict] \"%L\" Added Offline Kb-Restrict on SteamID(\"%s\") with Name(\"%s\") for \"%d\". \nReason: \"%s\"",
 							iAdmin, TargetSteamID, TargetName, time, reason);
 							
 	UpdateBannedIPs();
@@ -923,9 +998,9 @@ stock void KB_AddOfflineBan(const char[] TargetSteamID, const char[] TargetName,
 //----------------------------------------------------------------------------------------------------
 public void SQL_AddOfflineBan(Handle hDatabase, Handle hResults, const char[] sError, any data)
 {
-	if(sError[0])
-		LogError("[Kb-Restrict] Error while adding an offline kban to database, error: %s", sError);
-	else
+	if(sError[0] && g_hCVar_Debug.IntValue >= 1)
+		LogError("[Kb-Restrict] Error while adding an offline kban to database. \nError: %s", sError);
+	else if (g_hCVar_Debug.IntValue >= 2)
 		LogMessage("[Kb-Restrict] Successfully Added offline kban to database.");
 }
 
@@ -949,22 +1024,10 @@ stock void KB_RemoveBanFromDB(const char[] TargetSteamID)
 //----------------------------------------------------------------------------------------------------
 public void SQL_RemoveBanFromDB(Handle hDatabase, Handle hResults, const char[] sError, any data)
 {
-	if(sError[0])
-		LogError("[Kb-Restrict] Error while removing ban from database, error: %s", sError);
-	else
-		LogMessage("[Kb-Restrict] Successfully Removed Ban from Database.");
-}
-
-// COMMANDS RELATED STUFFS
-
-stock void KBan_Commands_PluginStart()
-{
-	RegConsoleCmd("sm_kstatus", Command_CheckKbStatus);
-	RegConsoleCmd("sm_kbanstatus", Command_CheckKbStatus);
-	
-	RegAdminCmd("sm_kban", Command_KbRestrict, ADMFLAG_BAN);
-	RegAdminCmd("sm_kunban", Command_KbUnRestrict, ADMFLAG_BAN);
-	RegAdminCmd("sm_koban", Command_OfflineKbRestrict, ADMFLAG_BAN);
+	if(sError[0] && g_hCVar_Debug.IntValue >= 1)
+		LogError("[Kb-Restrict] Error while removing KBan from database. \nError: %s", sError);
+	else if (g_hCVar_Debug.IntValue >= 2)
+		LogMessage("[Kb-Restrict] Successfully Removed Kban from Database.");
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -982,10 +1045,10 @@ public Action OnClientSayCommand(int client, const char[] command, const char[] 
 		return Plugin_Continue;
 		
 	int target = GetClientOfUserId(g_iClientTargets[client]);
+	int length = g_iClientTargetsLength[client];
+
 	if(!target)
 		return Plugin_Continue;
-		
-	int length = g_iClientTargetsLength[client];
 
 	if(StrEqual(command, "say") || StrEqual(command, "say_team"))
 	{
@@ -1094,7 +1157,25 @@ public Action Command_KbRestrict(int client, int args)
 	int time;
 	if(!StringToIntEx(s_time, time))
 		time = g_cvDefaultLength.IntValue;
-		
+	
+	// Check for Perma ban and then check if admin is not root if so then stop the command
+	if (time == 0 && !CheckCommandAccess(client, "sm_kban_perm", ADMFLAG_ROOT, true))
+	{
+		CReplyToCommand(client, "%s %T", KB_Tag, "Not have permission pKBan", client);
+		return Plugin_Handled;
+	}
+	
+	// Check for the limited kban length, and then check if admin is not root, if so then stop the command
+	if(time >= g_hCvar_MaxBanTime.IntValue)
+	{
+		//Check if admin has permission
+		if (!CheckCommandAccess(client, "sm_kban_long", ADMFLAG_ROOT, true))
+		{
+			CReplyToCommand(client, "%s %T", KB_Tag, "Not have permission lKBan", client, g_hCvar_MaxBanTime.IntValue);
+			return Plugin_Handled;
+		}
+	}
+	
 	int target = FindTarget(client, arg, false, false);
 	
 	if(!IsValidClient(target))
@@ -1330,7 +1411,7 @@ public void OnAdminMenuReady(Handle aTopMenu)
 		return;
 		
 	g_hAdminMenu.AddItem("KbRestrict_RestrictPlayer", ItemHandler_RestrictPlayer, hMenuObj, "sm_koban", ADMFLAG_BAN);
-	g_hAdminMenu.AddItem("KbRestrict_ListOfKbans", ItemHandler_ListOfKbans, hMenuObj, "sm_koban", ADMFLAG_BAN);
+	g_hAdminMenu.AddItem("KbRestrict_ListOfKbans", ItemHandler_ListOfKbans, hMenuObj, "sm_koban", ADMFLAG_RCON);
 	g_hAdminMenu.AddItem("KbRestrict_OnlineKBanned", ItemHandler_OnlineKBanned, hMenuObj, "sm_koban", ADMFLAG_BAN);
 	g_hAdminMenu.AddItem("KbRestrict_OwnBans", ItemHandler_OwnBans, hMenuObj, "sm_koban", ADMFLAG_BAN);
 }
@@ -1391,7 +1472,14 @@ public void ItemHandler_ListOfKbans(TopMenu topmenu,
 	}
 	else if(action == TopMenuAction_SelectOption)
 	{
-		DisplayKBan_Menu(param, .mode=MenuMode_AllBans);
+		if(CheckCommandAccess(param, "sm_koban", ADMFLAG_RCON, true))
+		{
+			DisplayKBan_Menu(param, .mode=MenuMode_AllBans);				
+		}
+		else
+		{
+			CPrintToChat(param, "%s You don't have access to view the KBan List.", KB_Tag);
+		}
 	}
 }
 
@@ -1574,10 +1662,10 @@ public int Menu_KbanHandler(Menu menu, MenuAction action, int param1, int param2
 			int num = StringToInt(ExBuffer[0]);
 			int userid = StringToInt(ExBuffer[1]);
 			int target = GetClientOfUserId(userid);
-			
+
 			if(!target)
 				return 0;
-			
+
 			if(num == 0)
 			{
 				g_iClientTargets[param1] = userid;
@@ -1604,16 +1692,17 @@ stock void DB_AddAllBansToMenu(int client)
 
 public void SQL_AddAllBansToMenu(Handle hDatabase, Handle hResults, const char[] sError, int userid)
 {
-	if(sError[0])
+	if(sError[0] && g_hCVar_Debug.IntValue >= 1)
 		LogError("Error: %s", sError);
 		
 	int client = GetClientOfUserId(userid);
+
 	if(client < 1)
 		return;
-	
+
 	if(!IsClientInGame(client))
 		return;
-		
+
 	if(hResults == null)
 		return;
 	
@@ -1726,10 +1815,10 @@ public int Menu_ActionsHandler(Menu menu, MenuAction action, int param1, int par
 			char buffer[32];
 			menu.GetItem(param2, buffer, sizeof(buffer));
 			int target = GetClientOfUserId(StringToInt(buffer));
-			
+
 			if(!target)
 				return 0;
-				
+
 			if(!IsValidClient(target))
 				CPrintToChat(param1, "%s %T", KB_Tag, "PlayerNotValid", param1);
 			
@@ -1768,10 +1857,10 @@ public void SQL_AddActionsFromDBToMenu(Handle hDatabase, Handle hResults, const 
 	int client = GetClientOfUserId(pack.ReadCell());
 	pack.ReadString(SteamID, sizeof(SteamID));
 	delete pack;
-	
+
 	if(!client)
 		return;
-		
+
 	if(!IsClientInGame(client))
 		return;
 	
@@ -1909,13 +1998,14 @@ stock void DB_AddAdminBansToMenu(int client)
 
 public void SQL_AddAdminBansToMenu(Handle hDatabase, Handle hResults, const char[] sError, int userid)
 {
-	if(sError[0])
+	if(sError[0] && g_hCVar_Debug.IntValue >= 1)
 		LogError("Error: %s", sError);
 		
 	int client = GetClientOfUserId(userid);
+
 	if(!client)
 		return;
-		
+
 	if(!IsClientInGame(client))
 		return;
 	
@@ -1998,10 +2088,10 @@ public void SQL_AddAdminBansActionsToMenu(Handle hDatabase, Handle hResults, con
 	char TargetSteamID[32];
 	pack.ReadString(TargetSteamID, sizeof(TargetSteamID));
 	delete pack;
-	
+
 	if(!client)
 		return;
-		
+
 	if(!IsClientInGame(client))
 		return;
 	
@@ -2227,11 +2317,11 @@ public int Menu_KbRestrict_Lengths(Menu menu, MenuAction action, int param1, int
 			char buffer[64];
 			menu.GetItem(param2, buffer, sizeof(buffer));
 			int time = StringToInt(buffer);
-			
 			int target = GetClientOfUserId(g_iClientTargets[param1]);
+
 			if(!target)
 				return 0;
-				
+	
 			if(IsValidClient(target))
 			{
 				g_iClientTargetsLength[param1] = time;
@@ -2292,10 +2382,12 @@ public int Menu_Reasons(Menu menu, MenuAction action, int param1, int param2)
 			if(param2 == MenuCancel_ExitBack)
 			{
 				g_bIsClientTypingReason[param1] = false;
+
 				int target = GetClientOfUserId(g_iClientTargets[param1]);
+
 				if(!target)
 					return 0;
-					
+
 				if(IsValidClient(target))
 					DisplayLengths_Menu(param1);
 				else
