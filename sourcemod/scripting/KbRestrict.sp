@@ -77,8 +77,8 @@ public Plugin myinfo =
 {
 	name = "Kb-Restrict",
 	author = "Dolly, .Rushaway",
-	description = "Block certain weapons damage from the KBanned players",
-	version = "3.2",
+	description = "Adjust weapons damage from the KBanned players",
+	version = "3.1.3",
 	url = "https://nide.gg"
 }
 
@@ -157,6 +157,26 @@ public void OnAllPluginsLoaded()
 
 //----------------------------------------------------------------------------------------------------
 // Purpose:
+//----------------------------------------------------------------------------------------------------
+	public void OnLibraryAdded(const char[] name)	
+{	
+	if (StrEqual(name, "KnifeMode"))	
+		g_bKnifeModeEnabled = true;	
+}
+
+//----------------------------------------------------------------------------------------------------	
+// Purpose:	
+//----------------------------------------------------------------------------------------------------	
+public void OnLibraryRemoved(const char[] name)	
+{	
+	if(StrEqual(name, "adminmenu", false))	
+		g_hAdminMenu = null;	
+	if (StrEqual(name, "KnifeMode"))	
+		g_bKnifeModeEnabled = false;	
+}
+
+//----------------------------------------------------------------------------------------------------	
+// Purpose:	
 //----------------------------------------------------------------------------------------------------
 public void OnMapStart()
 {
@@ -300,7 +320,7 @@ stock void FormatClientTeam(int client, char[] buf, int maxlen)
 //----------------------------------------------------------------------------------------------------
 public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
-	if(!g_bKnifeModeEnabled)
+	if(g_bKnifeModeEnabled == false)
 	{
 		if(IsValidClient(victim) && IsValidClient(attacker) && attacker != victim)
 		{
@@ -1383,15 +1403,6 @@ public Action Command_OfflineKbRestrict(int client, int args)
 // MENUS RELATED STUFFS
 
 // Top menu
-//----------------------------------------------------------------------------------------------------
-// Purpose:
-//----------------------------------------------------------------------------------------------------
-public void OnLibraryRemoved(const char[] name)
-{
-	if(StrEqual(name, "adminmenu", false))
-		g_hAdminMenu = null;
-}
-
 //----------------------------------------------------------------------------------------------------
 // Purpose:
 //----------------------------------------------------------------------------------------------------
